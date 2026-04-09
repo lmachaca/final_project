@@ -21,7 +21,8 @@ public partial class Item
     public string? Description { get; set; }
 
     [Column("suggested_selling_price")]
-    public int? SuggestedSellingPrice { get; set; }
+    [Precision(10, 2)]
+    public decimal? SuggestedSellingPrice { get; set; }
 
     [Column("volume_per_unit")]
     public int? VolumePerUnit { get; set; }

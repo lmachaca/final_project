@@ -1,6 +1,8 @@
 using Back_EndAPI.Data;
-using Back_EndAPI.Services;
+ 
 using ClassLibrary.Authorization;
+using ClassLibrary.DTOs;
+using Back_EndAPI.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
@@ -42,7 +44,6 @@ builder.Services.AddAuthentication(options =>
 builder.Services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
 
 
-
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
@@ -75,9 +76,9 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     ));
 
 // REGISTER YOUR HERO SERVICE
-builder.Services.AddScoped<AuthService>();
-builder.Services.AddScoped<CharacterService>();
-
+//builder.Services.AddScoped<AuthService>();
+//builder.Services.AddScoped<CharacterService>();
+builder.Services.AddScoped<IPurchaseOrderService, PurchaseOrderService>();
 var app = builder.Build();
 
 // TEMP DB TEST (optional)
