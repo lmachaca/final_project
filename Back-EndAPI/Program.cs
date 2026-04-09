@@ -79,6 +79,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 //builder.Services.AddScoped<AuthService>();
 //builder.Services.AddScoped<CharacterService>();
 builder.Services.AddScoped<IPurchaseOrderService, PurchaseOrderService>();
+builder.Services.AddScoped<IShipmentService, ShipmentService>();
 var app = builder.Build();
 
 // TEMP DB TEST (optional)
