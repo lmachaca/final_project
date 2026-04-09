@@ -8,6 +8,8 @@ namespace ClassLibrary.DTOs
     {
         public int Id { get; set; }
         public DateOnly DateOrdered { get; set; }
+        public string Status { get; set; } = "CREATED";
         public int? VendorId { get; set; }
     }
+
 }
