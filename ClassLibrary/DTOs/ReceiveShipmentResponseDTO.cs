@@ -8,6 +8,7 @@ namespace ClassLibrary.DTOs
     {
         public int ShipmentId { get; set; }
         public DateOnly ReceivedDate { get; set; }
+        public string Status { get; set; } = "CREATED";
         public int TotalItemsReceived { get; set; }
         public List<ReceivedItemDetailDto> Items { get; set; } = new();
         public List<DiscrepancyDto>? Discrepancies { get; set; }
