@@ -74,6 +74,26 @@ public class PurchaseOrderService : IPurchaseOrderService
             };
             _dbContext.OrderedItems.Add(orderedItem);
         }
+        //transaction
+        //using var transaction = await _dbContext.Database.BeginTransactionAsync();
+        //try
+        //{
+        //save/modifying thing 1
+        //save/modifyibg thing 2 
+        //  await transaction.CommitAsync();
+        //}
+        //catch { 
+        //   await transaction.RollbackAsync();
+        // throw;
+        //}
+
+        //EF
+        var purchase = new PurchaseOrder(); // create the purchse
+        var log = new Discrepancy();
+       // var otherThing = new CharTheirCard();
+        //_dbContext.PurchaseOrders.Add(purchase); // add it in the context
+        //_dbContext.Discrepancies.Add(log);
+        //_dbContext.Payment.Add(otherThing);
 
         await _dbContext.SaveChangesAsync();
 
@@ -88,4 +108,5 @@ public class PurchaseOrderService : IPurchaseOrderService
             Status = "CREATED"
         };
     }
+   
 }
