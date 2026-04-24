@@ -9,6 +9,7 @@ namespace Back_EndAPI.Services;
 public interface IShipmentService
 {
     Task<ReceiveShipmentResponseDto> ReceiveShipmentAsync(ReceiveShipmentRequestDto request);
+    Task<CreateShipmentResponseDto> CreateShipmentAsync(CreateShipmentRequestDto request);
 }
 
 public class ShipmentService : IShipmentService
@@ -33,7 +34,7 @@ public class ShipmentService : IShipmentService
 
         if (shipment == null)
         {
-            throw new ShipmentAlreadyReceivedException(request.ShipmentId);
+            throw new ShipmentNotFoundException(request.ShipmentId);
         }
 
         // 2. Check if shipment is already received (has ReceivedItems)
@@ -154,5 +155,36 @@ public class ShipmentService : IShipmentService
         }
 
         return response;
+    }
+
+    public async Task<CreateShipmentResponseDto> CreateShipmentAsync(CreateShipmentRequestDto request)
+    {
+        // 1. Validate purchase order exists
+        var purchaseOrderExists = await _dbContext.PurchaseOrders
+            .AnyAsync(po => po.Id == request.PurchaseOrderId);
+
+        if (!purchaseOrderExists)
+        {
+            throw new ArgumentException($"Purchase Order with ID {request.PurchaseOrderId} not found");
+        }
+
+        // 2. Create received shipment
+        var shipment = new ReceivedShipment
+        {
+            PurchaseOrderId = request.PurchaseOrderId,
+            Date = request.ShipmentDate ?? DateOnly.FromDateTime(DateTime.UtcNow)
+        };
+
+        _dbContext.ReceivedShipments.Add(shipment);
+        await _dbContext.SaveChangesAsync();
+
+        _logger.LogInformation($"Shipment {shipment.Id} created for Purchase Order {request.PurchaseOrderId}");
+
+        return new CreateShipmentResponseDto
+        {
+            Id = shipment.Id,
+            PurchaseOrderId = shipment.PurchaseOrderId ?? 0,
+            ShipmentDate = shipment.Date
+        };
     }
 }

@@ -7,4 +7,11 @@
         {
         }
     }
+    public class ShipmentNotFoundException : Exception
+    {
+        public ShipmentNotFoundException(int shipmentId)
+            : base($"Shipment with ID {shipmentId} not found")
+        {
+        }
+    }
 }

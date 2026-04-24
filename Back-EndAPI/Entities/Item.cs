@@ -35,4 +35,10 @@ public partial class Item
 
     [InverseProperty("SkuNumberNavigation")]
     public virtual ICollection<ReceivedItem> ReceivedItems { get; set; } = new List<ReceivedItem>();
+
+    [InverseProperty("SkuNumberNavigation")]
+    public virtual ICollection<ShippedItem> ShippedItems { get; set; } = new List<ShippedItem>();
+
+    [InverseProperty("SkuNumberNavigation")]
+    public virtual ICollection<SoldItem> SoldItems { get; set; } = new List<SoldItem>();
 }

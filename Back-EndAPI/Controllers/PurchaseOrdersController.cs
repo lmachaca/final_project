@@ -1,11 +1,13 @@
 ﻿using Back_EndAPI.Services;
 using ClassLibrary.DTOs;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Back_EndAPI.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize]
     public class PurchaseOrdersController : ControllerBase
     {
         private readonly IPurchaseOrderService _purchaseOrderService;

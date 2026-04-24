@@ -42,7 +42,10 @@ builder.Services.AddAuthentication(options =>
 
 // TO THIS:
 builder.Services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
-
+builder.Services.AddScoped<ITransferRecordService, TransferRecordService>();
+builder.Services.AddScoped<IStoreOrderService, StoreOrderService>();
+// Add this line with the other service registrations:
+builder.Services.AddScoped<IAuthService, AuthService>();
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
