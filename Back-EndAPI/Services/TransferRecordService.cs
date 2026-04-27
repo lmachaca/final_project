@@ -22,53 +22,65 @@ namespace Back_EndAPI.Services
         }
         public async Task<StoreTransferRecordResponseDto> StoreTransferRecordAsync(StoreTransferRecordRequestDto request)
         {
-            // 1. Validate received item exists
-            var receivedItem = await _dbContext.ReceivedItems.FindAsync(request.ReceivedItemId);
-            if (receivedItem == null)
+            using var transaction = await _dbContext.Database.BeginTransactionAsync();
+            try
             {
-                throw new ArgumentException($"Received Item with ID {request.ReceivedItemId} not found");
+                // 1. Validate received item exists
+                var receivedItem = await _dbContext.ReceivedItems.FindAsync(request.ReceivedItemId);
+                if (receivedItem == null)
+                {
+                    throw new ArgumentException($"Received Item with ID {request.ReceivedItemId} not found");
+                }
+
+                // 2. Validate storage location (bin) exists
+                var storageLocation = await _dbContext.Bins.FindAsync(request.StorageLocationId);
+                if (storageLocation == null)
+                {
+                    throw new ArgumentException($"Storage Location (Bin) with ID {request.StorageLocationId} not found");
+                }
+
+                // 3. Validate quantity
+                if (request.Quantity <= 0)
+                {
+                    throw new ArgumentException("Quantity must be greater than 0");
+                }
+
+                // 4. Create transfer record with deposit flag
+                var transferRecord = new TransferRecord
+                {
+                    Receiveditemid = request.ReceivedItemId,
+                    Storagelocationid = request.StorageLocationId,
+                    Qty = request.Quantity,
+                    Deposit = true,
+                    Withdrawal = false,
+                    Datetime = DateTime.UtcNow
+                };
+
+                _dbContext.TransferRecords.Add(transferRecord);
+                await _dbContext.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                _logger.LogInformation($"Transfer Record {transferRecord.Id} created: Item {request.ReceivedItemId} stored in bin {request.StorageLocationId} with quantity {request.Quantity}");
+
+                return new StoreTransferRecordResponseDto
+                {
+                    TransferRecordId = transferRecord.Id,
+                    ReceivedItemId = request.ReceivedItemId,
+                    StorageLocationId = request.StorageLocationId,
+                    Quantity = request.Quantity,
+                    Deposit = true,
+                    StoredDateTime = transferRecord.Datetime ?? DateTime.UtcNow,
+                    Message = "Item stored successfully"
+                };
+
             }
-
-            // 2. Validate storage location (bin) exists
-            var storageLocation = await _dbContext.Bins.FindAsync(request.StorageLocationId);
-            if (storageLocation == null)
+            catch (Exception ex)
             {
-                throw new ArgumentException($"Storage Location (Bin) with ID {request.StorageLocationId} not found");
+                // ROLLBACK ON ERROR
+                await transaction.RollbackAsync();
+                _logger.LogError($"Store inventory transaction failed, rolling back: {ex.Message}");
+                throw;
             }
-
-            // 3. Validate quantity
-            if (request.Quantity <= 0)
-            {
-                throw new ArgumentException("Quantity must be greater than 0");
-            }
-
-            // 4. Create transfer record with deposit flag
-            var transferRecord = new TransferRecord
-            {
-                Receiveditemid = request.ReceivedItemId,
-                Storagelocationid = request.StorageLocationId,
-                Qty = request.Quantity,
-                Deposit = true,
-                Withdrawal = false,
-                Datetime = DateTime.UtcNow
-            };
-
-            _dbContext.TransferRecords.Add(transferRecord);
-            await _dbContext.SaveChangesAsync();
-
-            _logger.LogInformation($"Transfer Record {transferRecord.Id} created: Item {request.ReceivedItemId} stored in bin {request.StorageLocationId} with quantity {request.Quantity}");
-
-            return new StoreTransferRecordResponseDto
-            {
-                TransferRecordId = transferRecord.Id,
-                ReceivedItemId = request.ReceivedItemId,
-                StorageLocationId = request.StorageLocationId,
-                Quantity = request.Quantity,
-                Deposit = true,
-                StoredDateTime = transferRecord.Datetime ?? DateTime.UtcNow,
-                Message = "Item stored successfully"
-            };
         }
     }
-
 }

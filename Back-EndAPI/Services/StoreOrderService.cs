@@ -75,144 +75,188 @@ namespace Back_EndAPI.Services
         }
         public async Task<StoreOrderResponseDto> PickOrderAsync(int orderId)
         {
-            var order = await _dbContext.CustomerOrders.FindAsync(orderId);
-            if (order == null)
-                throw new ArgumentException($"Order with ID {orderId} not found");
-
-            // Get sold items for this order
-            var soldItems = await _dbContext.SoldItems
-                .Where(si => si.CustomerOrderId == orderId)
-                .ToListAsync();
-
-            if (!soldItems.Any())
-                throw new ArgumentException("Order contains no items to pick");
-
-            // IDEMPOTENCY CHECK: Get all received item IDs from sold items
-            var soldItemIds = soldItems.Select(si => si.Id).ToList();
-
-            var alreadyPickedWithdrawals = await _dbContext.TransferRecords
-                .Where(tr => tr.Withdrawal == true &&
-                       (tr.Receiveditemid.HasValue && soldItemIds.Contains(tr.Receiveditemid.Value)))
-                .AnyAsync();
-
-            if (alreadyPickedWithdrawals)
+            using var transaction = await _dbContext.Database.BeginTransactionAsync();
+            try
             {
-                _logger.LogWarning($"Order {orderId} was already picked - preventing duplicate withdrawal");
-                throw new ArgumentException("Order has already been picked. Cannot pick twice (idempotency protection)");
-            }
+                var order = await _dbContext.CustomerOrders.FindAsync(orderId);
+                if (order == null)
+                    throw new ArgumentException($"Order with ID {orderId} not found");
 
-            // Check inventory and bin constraint for each item
-            foreach (var soldItem in soldItems)
-            {
-                // Get received items (inventory) for this SKU
-                var receivedItems = await _dbContext.ReceivedItems
-                    .Where(ri => ri.SkuNumber == soldItem.SkuNumber)
+                // Get sold items for this order
+                var soldItems = await _dbContext.SoldItems
+                    .Where(si => si.CustomerOrderId == orderId)
                     .ToListAsync();
 
-                if (!receivedItems.Any())
+                if (!soldItems.Any())
+                    throw new ArgumentException("Order contains no items to pick");
+
+                // IDEMPOTENCY CHECK: Get all received item IDs from sold items
+                var soldItemIds = soldItems.Select(si => si.Id).ToList();
+
+                var alreadyPickedWithdrawals = await _dbContext.TransferRecords
+                    .Where(tr => tr.Withdrawal == true &&
+                           (tr.Receiveditemid.HasValue && soldItemIds.Contains(tr.Receiveditemid.Value)))
+                    .AnyAsync();
+
+                if (alreadyPickedWithdrawals)
                 {
-                    throw new ArgumentException($"No inventory for SKU {soldItem.SkuNumber}");
+                    _logger.LogWarning($"Order {orderId} was already picked - preventing duplicate withdrawal");
+                    throw new ArgumentException("Order has already been picked. Cannot pick twice (idempotency protection)");
                 }
 
-                // Calculate available inventory (deposits - withdrawals)
-                int availableQty = 0;
-                foreach (var receivedItem in receivedItems)
+                // Check inventory and bin constraint for each item
+                foreach (var soldItem in soldItems)
                 {
-                    var deposits = await _dbContext.TransferRecords
-                        .Where(tr => tr.Receiveditemid == receivedItem.Id && tr.Deposit == true)
-                        .SumAsync(tr => tr.Qty ?? 0);
+                    // Get received items (inventory) for this SKU
+                    var receivedItems = await _dbContext.ReceivedItems
+                        .Where(ri => ri.SkuNumber == soldItem.SkuNumber)
+                        .ToListAsync();
 
-                    var withdrawals = await _dbContext.TransferRecords
-                        .Where(tr => tr.Receiveditemid == receivedItem.Id && tr.Withdrawal == true)
-                        .SumAsync(tr => tr.Qty ?? 0);
-
-                    availableQty += (deposits - withdrawals);
-                }
-
-                // Negative inventory protection
-                if (availableQty < (soldItem.Qty))
-                {
-                    throw new ArgumentException($"Insufficient inventory for SKU {soldItem.SkuNumber}. Required: {soldItem.Qty}, Available: {availableQty}");
-                }
-
-            }
-
-            // Create withdrawal records for picked items (IDEMPOTENT)
-            foreach (var soldItem in soldItems)
-            {
-                var receivedItem = await _dbContext.ReceivedItems
-                    .FirstOrDefaultAsync(ri => ri.SkuNumber == soldItem.SkuNumber);
-
-                if (receivedItem != null)
-                {
-                    var withdrawalRecord = new TransferRecord
+                    if (!receivedItems.Any())
                     {
-                        Receiveditemid = receivedItem.Id,
-                       // Storagelocationid = soldItem.BinId,
-                        Withdrawal = true,
-                        Deposit = false,
-                        Qty = soldItem.Qty,
-                        Datetime = DateTime.UtcNow
-                    };
+                        throw new ArgumentException($"No inventory for SKU {soldItem.SkuNumber}");
+                    }
 
-                    _dbContext.TransferRecords.Add(withdrawalRecord);
+                    // Calculate available inventory (deposits - withdrawals)
+                    int availableQty = 0;
+                    foreach (var receivedItem in receivedItems)
+                    {
+                        var deposits = await _dbContext.TransferRecords
+                            .Where(tr => tr.Receiveditemid == receivedItem.Id && tr.Deposit == true)
+                            .SumAsync(tr => tr.Qty ?? 0);
+
+                        var withdrawals = await _dbContext.TransferRecords
+                            .Where(tr => tr.Receiveditemid == receivedItem.Id && tr.Withdrawal == true)
+                            .SumAsync(tr => tr.Qty ?? 0);
+
+                        availableQty += (deposits - withdrawals);
+                    }
+
+                    // Negative inventory protection
+                    if (availableQty < (soldItem.Qty))
+                    {
+                        throw new ArgumentException($"Insufficient inventory for SKU {soldItem.SkuNumber}. Required: {soldItem.Qty}, Available: {availableQty}");
+                    }
+
                 }
+                // SAVE WITHIN TRANSACTION
+                await _dbContext.SaveChangesAsync();
+
+                // COMMIT TRANSACTION
+                await transaction.CommitAsync();
+
+                _logger.LogInformation($"Order {orderId} picked successfully (transaction committed)");
+                // Create withdrawal records for picked items (IDEMPOTENT)
+                foreach (var soldItem in soldItems)
+                {
+                    var receivedItem = await _dbContext.ReceivedItems
+                        .FirstOrDefaultAsync(ri => ri.SkuNumber == soldItem.SkuNumber);
+
+                    if (receivedItem != null)
+                    {
+                        var withdrawalRecord = new TransferRecord
+                        {
+                            Receiveditemid = receivedItem.Id,
+                            // Storagelocationid = soldItem.BinId,
+                            Withdrawal = true,
+                            Deposit = false,
+                            Qty = soldItem.Qty,
+                            Datetime = DateTime.UtcNow
+                        };
+
+                        _dbContext.TransferRecords.Add(withdrawalRecord);
+                    }
+                }
+
+                await _dbContext.SaveChangesAsync();
+                // COMMIT TRANSACTION
+                await transaction.CommitAsync();
+
+                _logger.LogInformation($"Order {orderId} picked, withdrawal records created");
+
+                return new StoreOrderResponseDto
+                {
+                    Id = order.Id,
+                    SupplierId = order.CustomerId,
+                    DatePurchased = order.DateTimeOrdered,
+                    Status = "PICKED",
+                    Items = new List<StoreOrderItemResponseDto>()
+                };
             }
-
-            await _dbContext.SaveChangesAsync();
-
-            _logger.LogInformation($"Order {orderId} picked, withdrawal records created");
-
-            return new StoreOrderResponseDto
+            catch (Exception ex)
             {
-                Id = order.Id,
-                SupplierId = order.CustomerId,
-                DatePurchased = order.DateTimeOrdered,
-                Status = "PICKED",
-                Items = new List<StoreOrderItemResponseDto>()
-            };
+                // ROLLBACK ON ERROR
+                await transaction.RollbackAsync();
+                _logger.LogError($"Pick order transaction failed, rolling back: {ex.Message}");
+                throw;
+            }
         }
-
         public async Task<StoreOrderResponseDto> PackOrderAsync(int orderId)
         {
-            var order = await _dbContext.CustomerOrders.FindAsync(orderId);
-
-            if (order == null)
+            // START TRANSACTION
+            using var transaction = await _dbContext.Database.BeginTransactionAsync();
+            try
             {
-                throw new ArgumentException($"Order with ID {orderId} not found");
+                var order = await _dbContext.CustomerOrders.FindAsync(orderId);
+
+                if (order == null)
+                {
+                    throw new ArgumentException($"Order with ID {orderId} not found");
+                }
+                await _dbContext.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                _logger.LogInformation($"Order {orderId} status updated to PACKED");
+
+                return new StoreOrderResponseDto
+                {
+                    Id = order.Id,
+                    SupplierId = order.CustomerId,
+                    DatePurchased = order.DateTimeOrdered,
+                    Status = "PACKED",
+                    Items = new List<StoreOrderItemResponseDto>()
+                };
             }
-
-            _logger.LogInformation($"Order {orderId} status updated to PACKED");
-
-            return new StoreOrderResponseDto
+            catch (Exception ex)
             {
-                Id = order.Id,
-                SupplierId = order.CustomerId,
-                DatePurchased = order.DateTimeOrdered,
-                Status = "PACKED",
-                Items = new List<StoreOrderItemResponseDto>()
-            };
+                await transaction.RollbackAsync();
+                _logger.LogError($"Pack order transaction failed, rolling back: {ex.Message}");
+                throw;
+            }
         }
         public async Task<StoreOrderResponseDto> ShipOrderAsync(int orderId)
         {
-            var order = await _dbContext.CustomerOrders.FindAsync(orderId);
-
-            if (order == null)
+            using var transaction = await _dbContext.Database.BeginTransactionAsync();
+            try
             {
-                throw new ArgumentException($"Order with ID {orderId} not found");
+                var order = await _dbContext.CustomerOrders.FindAsync(orderId);
+
+                if (order == null)
+                {
+                    throw new ArgumentException($"Order with ID {orderId} not found");
+                }
+
+                await _dbContext.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                _logger.LogInformation($"Order {orderId} status updated to SHIPPED");
+
+                return new StoreOrderResponseDto
+                {
+                    Id = order.Id,
+                    SupplierId = order.CustomerId,
+                    DatePurchased = order.DateTimeOrdered,
+                    Status = "SHIPPED",
+                    Items = new List<StoreOrderItemResponseDto>()
+                };
             }
-
-            _logger.LogInformation($"Order {orderId} status updated to SHIPPED");
-
-            return new StoreOrderResponseDto
+            catch (Exception ex)
             {
-                Id = order.Id,
-                SupplierId = order.CustomerId,
-                DatePurchased = order.DateTimeOrdered,
-                Status = "SHIPPED",
-                Items = new List<StoreOrderItemResponseDto>()
-            };
+                await transaction.RollbackAsync();
+                _logger.LogError($"Ship order transaction failed, rolling back: {ex.Message}");
+                throw;
+            }
         }
-    }
+    } 
 
 }
