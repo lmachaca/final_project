@@ -47,6 +47,9 @@ builder.Services.AddScoped<ITransferRecordService, TransferRecordService>();
 builder.Services.AddScoped<IStoreOrderService, StoreOrderService>();
 // Add this line with the other service registrations:
 builder.Services.AddScoped<IAuthService, AuthService>();
+// Add these lines with other service registrations:
+builder.Services.AddScoped<IInventoryReportService, InventoryReportService>();
+builder.Services.AddScoped<IOrderReportService, OrderReportService>();
 
 // Add distributed memory cache
 builder.Services.AddDistributedMemoryCache();
