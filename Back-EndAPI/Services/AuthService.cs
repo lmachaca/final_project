@@ -61,7 +61,12 @@ public class AuthService : IAuthService
 
     public async Task<LoginResponseDto> LoginAsync(LoginRequestDto request)
     {
-        // DEVELOPMENT ONLY: Test user for Swagger testing
+        // roles
+
+        var adminUsers = new[] { "testuser", "admin" };
+        var warehouseUsers = new[] { "warehouse", "warehouseworker" };
+
+        //  Test user for Swagger testing
         if (request.Username == "testuser" && request.Password == "password123")
         {
             _logger.LogWarning("⚠️ Using test user (development only)");
@@ -75,6 +80,20 @@ public class AuthService : IAuthService
                 Username = "testuser",
                 Token = ttoken
                 
+            };
+        }
+
+
+        if (request.Username == "warehouse" && request.Password == "password123")
+        {
+            var role = DetermineRole(request.Username);
+            var Ltoken = GenerateToken(new Login { Id = 888, Username = "warehouse" });
+
+            return new LoginResponseDto
+            {
+                UserId = 888,
+                Username = "warehouse",
+                Token = Ltoken
             };
         }
 
@@ -108,6 +127,20 @@ public class AuthService : IAuthService
             Token = token
        
         };
+    }
+    private string DetermineRole(string username)
+    {
+        // Hardcoded role mapping
+        var adminUsers = new[] { "testuser", "admin" };
+        var warehouseUsers = new[] { "warehouse", "warehouseworker" };
+
+        if (adminUsers.Contains(username.ToLower()))
+            return "admin";
+
+        if (warehouseUsers.Contains(username.ToLower()))
+            return "warehouse_worker";
+
+        return "customer"; // Default role
     }
 
     private string GenerateToken(Login user)

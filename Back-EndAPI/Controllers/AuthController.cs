@@ -29,6 +29,7 @@
 
 using Back_EndAPI.Services;
 using ClassLibrary.DTOs;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Back_EndAPI.Controllers;
@@ -71,4 +72,7 @@ public class AuthController : ControllerBase
                 new { message = "An error occurred during login" });
         }
     }
+
+    [Authorize(Roles = "admin,warehouse_worker")]
+    public class PurchaseOrdersController : ControllerBase { }
 }

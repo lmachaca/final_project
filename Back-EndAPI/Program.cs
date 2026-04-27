@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using System.Text;
+using Back_EndAPI.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 var key = "THIS_IS_MY_SECRET_KEY_1234567890";
@@ -46,6 +47,10 @@ builder.Services.AddScoped<ITransferRecordService, TransferRecordService>();
 builder.Services.AddScoped<IStoreOrderService, StoreOrderService>();
 // Add this line with the other service registrations:
 builder.Services.AddScoped<IAuthService, AuthService>();
+
+// Add distributed memory cache
+builder.Services.AddDistributedMemoryCache();
+builder.Services.AddScoped<IIdempotencyService, IdempotencyService>();
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -109,6 +114,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseMiddleware<IdempotencyMiddleware>();
 app.UseAuthentication(); //must be before !!!
 app.UseAuthorization();
 app.MapControllers();
